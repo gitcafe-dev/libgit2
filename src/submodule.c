@@ -1613,6 +1613,11 @@ static void submodule_release(git_submodule *sm)
 	git__free(sm);
 }
 
+void git_submodule_addref(git_submodule *sm)
+{
+	GIT_REFCOUNT_INC(sm);
+}
+
 void git_submodule_free(git_submodule *sm)
 {
 	if (!sm)

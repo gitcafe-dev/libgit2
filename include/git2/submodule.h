@@ -213,9 +213,17 @@ GIT_EXTERN(int) git_submodule_lookup(
 	const char *name);
 
 /**
- * Release a submodule
+ * add ref count for a submodule
  *
- * @param submodule Submodule object
+ * @param submodule submodule object
+ */
+GIT_EXTERN(void) git_submodule_addref(git_submodule *submodule);
+
+
+/**
+ * release a submodule
+ *
+ * @param submodule submodule object
  */
 GIT_EXTERN(void) git_submodule_free(git_submodule *submodule);
 
