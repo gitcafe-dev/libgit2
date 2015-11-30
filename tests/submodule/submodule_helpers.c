@@ -3,6 +3,7 @@
 #include "path.h"
 #include "util.h"
 #include "posix.h"
+#include "branch.h"
 #include "submodule_helpers.h"
 #include "git2/sys/repository.h"
 
@@ -168,6 +169,18 @@ void assert__submodule_exists(
 	git_submodule_free(sm);
 }
 
+void assert__submodule_exists_on(
+	git_repository *repo, const char *name, git_tree *tree,
+	const char *msg, const char *file, int line)
+{
+	git_submodule *sm;
+	int error = git_submodule_lookup_from_tree(&sm, repo, name, tree);
+	if (error)
+		cl_git_report_failure(error, file, line, msg);
+	cl_assert_at_line(sm != NULL, file, line);
+	git_submodule_free(sm);
+}
+
 void refute__submodule_exists(
 	git_repository *repo, const char *name, int expected_error,
 	const char *msg, const char *file, int line)
@@ -175,6 +188,15 @@ void refute__submodule_exists(
 	clar__assert_equal(
 		file, line, msg, 1, "%i",
 		expected_error, (int)(git_submodule_lookup(NULL, repo, name)));
+}
+
+void refute__submodule_exists_on(
+	git_repository *repo, const char *name, git_tree *tree, int expected_error,
+	const char *msg, const char *file, int line)
+{
+	clar__assert_equal(
+		file, line, msg, 1, "%i",
+		expected_error, (int)(git_submodule_lookup_from_tree(NULL, repo, name, tree)));
 }
 
 unsigned int get_submodule_status(git_repository *repo, const char *name)
@@ -203,3 +225,12 @@ void dump_submodules(git_repository *repo)
 	git_submodule_foreach(repo, print_submodules, NULL);
 }
 
+void get_tree_from_branch(git_tree **tree, git_repository *repo, const char *branch_name) {
+    git_reference *branch;
+    git_commit *commit;
+    cl_git_pass(git_branch_lookup(&branch, repo, branch_name, GIT_BRANCH_LOCAL));
+    cl_git_pass(git_commit_lookup(&commit, repo, git_reference_target(branch)));
+    cl_git_pass(git_commit_tree(tree, commit));
+    git_reference_free(branch);
+    git_commit_free(commit);
+}

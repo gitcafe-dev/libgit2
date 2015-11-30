@@ -128,6 +128,32 @@ int git_config_add_file_ondisk(
 	return 0;
 }
 
+int git_config_add_fromblob(
+	git_config *cfg,
+	git_blob *blob,
+	git_config_level_t level,
+	int force)
+{
+	git_config_backend *backend = NULL;
+	int res;
+
+	assert(cfg && blob);
+
+	if (git_config_file__fromblob(&backend, blob) < 0)
+		return -1;
+
+	if ((res = git_config_add_backend(cfg, backend, level, force)) < 0) {
+		/*
+		 * free manually; the file is not owned by the config
+		 * instance yet and will not be freed on cleanup
+		 */
+		backend->free(backend);
+		return res;
+	}
+
+	return 0;
+}
+
 int git_config_open_ondisk(git_config **out, const char *path)
 {
 	int error;
@@ -139,6 +165,24 @@ int git_config_open_ondisk(git_config **out, const char *path)
 		return -1;
 
 	if ((error = git_config_add_file_ondisk(config, path, GIT_CONFIG_LEVEL_LOCAL, 0)) < 0)
+		git_config_free(config);
+	else
+		*out = config;
+
+	return error;
+}
+
+int git_config_open_fromblob(git_config **out, git_blob *blob)
+{
+	int error;
+	git_config *config;
+
+	*out = NULL;
+
+	if (git_config_new(&config) < 0)
+		return -1;
+
+	if ((error = git_config_add_fromblob(config, blob, GIT_CONFIG_LEVEL_LOCAL, 0)) < 0)
 		git_config_free(config);
 	else
 		*out = config;

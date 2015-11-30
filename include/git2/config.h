@@ -209,6 +209,12 @@ GIT_EXTERN(int) git_config_add_file_ondisk(
 	git_config_level_t level,
 	int force);
 
+GIT_EXTERN(int) git_config_add_fromblob(
+	git_config *cfg,
+	git_blob *blob,
+	git_config_level_t level,
+	int force);
+
 /**
  * Create a new config instance containing a single on-disk file
  *
@@ -222,6 +228,7 @@ GIT_EXTERN(int) git_config_add_file_ondisk(
  * @return 0 on success, or an error code
  */
 GIT_EXTERN(int) git_config_open_ondisk(git_config **out, const char *path);
+GIT_EXTERN(int) git_config_open_fromblob(git_config **out, git_blob *blob);
 
 /**
  * Build a single-level focused config object from a multi-level one.

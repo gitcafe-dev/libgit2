@@ -90,10 +90,11 @@ __KHASH_IMPL(
 static int submodule_alloc(git_submodule **out, git_repository *repo, const char *name);
 static git_config_backend *open_gitmodules(git_repository *repo, int gitmod);
 static git_config *gitmodules_snapshot(git_repository *repo);
+static git_config *gitmodules_config_from_tree(git_repository *repo, git_tree *tree);
 static int get_url_base(git_buf *url, git_repository *repo);
 static int lookup_head_remote_key(git_buf *remote_key, git_repository *repo);
 static int submodule_load_each(const git_config_entry *entry, void *payload);
-static int submodule_read_config(git_submodule *sm, git_config *cfg);
+static int submodule_read_config(git_submodule *sm, git_config *cfg, int ignore_notfound);
 static int submodule_load_from_wd_lite(git_submodule *);
 static void submodule_get_index_status(unsigned int *, git_submodule *);
 static void submodule_get_wd_status(unsigned int *, git_submodule *, git_repository *, git_submodule_ignore_t);
@@ -273,6 +274,40 @@ int git_submodule_lookup(
 
 		submodule_set_lookup_error(error, name);
 		return error;
+	}
+
+	if (out)
+		*out = sm;
+	else
+		git_submodule_free(sm);
+
+	return 0;
+}
+
+int git_submodule_lookup_from_tree(
+	git_submodule **out, /* NULL if user only wants to test existence */
+	git_repository *repo,
+	const char *name,    /* trailing slash is allowed */
+	git_tree *tree)
+{
+	int error;
+	git_submodule *sm;
+	git_config_backend *mods;
+
+	assert(repo && name);
+
+	if ((error = submodule_alloc(&sm, repo, name)) < 0)
+		return error;
+
+	mods = gitmodules_config_from_tree(sm->repo, tree);
+	if (mods != NULL) {
+		error = submodule_read_config(sm, mods, 0);
+		git_config_free(mods);
+
+		if (error < 0) {
+			git_submodule_free(sm);
+			return error;
+		}
 	}
 
 	if (out)
@@ -1037,7 +1072,7 @@ static int submodule_repo_create(
 
 	/**
 	 * Repodir: path to the sub-repo. sub-repo goes in:
-	 * <repo-dir>/modules/<name>/ with a gitlink in the 
+	 * <repo-dir>/modules/<name>/ with a gitlink in the
 	 * sub-repo workdir directory to that repository.
 	 */
 	error = git_buf_join3(
@@ -1154,7 +1189,7 @@ int git_submodule_update(git_submodule *sm, int init, git_submodule_update_optio
 		clone_options.repository_cb_payload = sm;
 
 		/*
-		 * Do not perform checkout as part of clone, instead we 
+		 * Do not perform checkout as part of clone, instead we
 		 * will checkout the specific commit manually.
 		 */
 		clone_options.checkout_opts.checkout_strategy = GIT_CHECKOUT_NONE;
@@ -1448,7 +1483,7 @@ int git_submodule_reload(git_submodule *sm, int force)
 	/* refresh config data */
 	mods = gitmodules_snapshot(sm->repo);
 	if (mods != NULL) {
-		error = submodule_read_config(sm, mods);
+		error = submodule_read_config(sm, mods, 1);
 		git_config_free(mods);
 
 		if (error < 0) {
@@ -1687,7 +1722,7 @@ static int get_value(const char **out, git_config *cfg, git_buf *buf, const char
 	return error;
 }
 
-static int submodule_read_config(git_submodule *sm, git_config *cfg)
+static int submodule_read_config(git_submodule *sm, git_config *cfg, int ignore_notfound)
 {
 	git_buf key = GIT_BUF_INIT;
 	const char *value;
@@ -1710,7 +1745,7 @@ static int submodule_read_config(git_submodule *sm, git_config *cfg)
 			sm->path = git__strdup(value);
 			GITERR_CHECK_ALLOC(sm->path);
 		}
-	} else if (error != GIT_ENOTFOUND) {
+	} else if (!ignore_notfound || error != GIT_ENOTFOUND) {
 		goto cleanup;
 	}
 
@@ -1806,7 +1841,7 @@ static int submodule_load_each(const git_config_entry *entry, void *payload)
 	if ((error = submodule_alloc(&sm, data->repo, name.ptr)) < 0)
 		goto done;
 
-	if ((error = submodule_read_config(sm, data->mods)) < 0) {
+	if ((error = submodule_read_config(sm, data->mods, 1)) < 0) {
 		git_submodule_free(sm);
 		goto done;
 	}
@@ -1867,6 +1902,28 @@ static git_config *gitmodules_snapshot(git_repository *repo)
 	}
 
 	return snap;
+}
+
+static git_config *gitmodules_config_from_tree(git_repository *repo, git_tree *tree)
+{
+	git_tree_entry *entry;
+	git_blob *blob;
+	git_config *config = NULL;
+	int error;
+
+	if (git_tree_entry_bypath(&entry, tree, GIT_MODULES_FILE) < 0)
+		return NULL;
+
+	error = git_blob_lookup(&blob, repo, git_tree_entry_id(entry));
+	git_tree_entry_free(entry);
+	if (error < 0) return NULL;
+
+	if (git_config_open_fromblob(&config, blob) < 0) {
+		git_blob_free(blob);
+		return NULL;
+	}
+
+	return config;
 }
 
 static git_config_backend *open_gitmodules(

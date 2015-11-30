@@ -212,6 +212,12 @@ GIT_EXTERN(int) git_submodule_lookup(
 	git_repository *repo,
 	const char *name);
 
+GIT_EXTERN(int) git_submodule_lookup_from_tree(
+	git_submodule **out,
+	git_repository *repo,
+	const char *name,
+	git_tree *tree);
+
 /**
  * add ref count for a submodule
  *
